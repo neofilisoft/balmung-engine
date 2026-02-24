@@ -1,0 +1,2 @@
+experiments/** linguist-detectable=false
+thirdparty/** linguist-vendored=true
