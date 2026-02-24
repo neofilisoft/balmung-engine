@@ -8,21 +8,10 @@ g++
 
 ## Build (Windows)
 # Requirements
-.NET SDK 8
-CMake 3.22
-Visual Studio 2022 Build Tools
-Ninja (Optional)
-
-## Block Types
-
-| # | Block |
-|---|-------|
-| 1 | Grass |
-| 2 | Dirt |
-| 3 | Stone |
-| 4 | Wood |
-| 5 | Leaves |
-| 6 | Sand |
+- .NET SDK 8
+- CMake 3.22
+- Visual Studio 2022 Build Tools
+- Ninja (Optional)
 
 ## Project Structure
 
