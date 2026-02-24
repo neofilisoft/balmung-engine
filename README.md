@@ -1,6 +1,6 @@
 # VoxelBlock
 
-VoxelBlock is a hybrid game engine/tooling project with:
+VoxelBlock is a hybrid tooling project with:
 - `C++` native engine modules (renderer/runtime/physics/material/scene scaffolds)
 - `C#` Avalonia editor (`VoxelBlock.Editor`)
 - `Lua` modding scripts (`mods/`)
