@@ -1,0 +1,8 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <AssemblyName>VoxelBlock.Bridge</AssemblyName>
+    <RootNamespace>VoxelBlock.Bridge</RootNamespace>
+  </PropertyGroup>
+</Project>
