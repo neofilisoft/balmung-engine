@@ -8,6 +8,7 @@ using System.IO;
 using System.Runtime.CompilerServices;
 using System.Text;
 using System.Windows.Input;
+using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Media;
 using Avalonia.Threading;
@@ -51,6 +52,7 @@ namespace VoxelBlock.Editor
         private long              _assetFingerprint;
         private readonly StringBuilder _luaLog = new();
         private readonly StringBuilder _csharpScriptLog = new();
+        private readonly StringBuilder _outputLog = new();
         private readonly AssetPipelineService _assetPipeline = new();
         private readonly StandaloneExportService _exportService = new();
         private readonly VoxelScriptContext _scriptContext;
@@ -67,6 +69,16 @@ namespace VoxelBlock.Editor
         private string _csharpScriptInput   = "EditorHeartbeat";
         private string _csharpScriptOutput  = "";
         private string _csharpScriptStatus  = "C# scripting runtime ready";
+        private string _editorModeLabel     = "Scene";
+        private string _terrainToolLabel    = "Select";
+        private string _hierarchySearchText = "";
+        private string _outlinerSearchText  = "";
+        private string _contentBrowserSearchText = "";
+        private string _contentBrowserStatus = "0 assets";
+        private string _outputSearchText = "";
+        private string _outputStatus = "Ready";
+        private string _outputLogText = "";
+        private string _inspectorTitle = "Inspector";
         private string _selectedBlockName    = "";       
         private string _selectedBlockHardness = "1.0"; 
         private string _assetPipelineStatus = "Idle";
@@ -76,7 +88,15 @@ namespace VoxelBlock.Editor
         private StatsViewModel  _stats = new();
         private long            _engineHandle;
 
-        public string StatusText   { get => _statusText;   set => Set(ref _statusText,   value); }
+        public string StatusText
+        {
+            get => _statusText;
+            set
+            {
+                if (Set(ref _statusText, value))
+                    _appendOutputLine(value);
+            }
+        }
         public string StatsText    { get => _statsText;    set => Set(ref _statsText,    value); }
         public string WorldName    { get => _worldName;    set => Set(ref _worldName,    value); }
         public string SeedText     { get => _seedText;     set => Set(ref _seedText,     value); }
@@ -88,6 +108,16 @@ namespace VoxelBlock.Editor
         public string CSharpScriptInput  { get => _csharpScriptInput;  set => Set(ref _csharpScriptInput, value); }
         public string CSharpScriptOutput { get => _csharpScriptOutput; set => Set(ref _csharpScriptOutput, value); }
         public string CSharpScriptStatus { get => _csharpScriptStatus; set => Set(ref _csharpScriptStatus, value); }
+        public string EditorModeLabel { get => _editorModeLabel; set => Set(ref _editorModeLabel, value); }
+        public string TerrainToolLabel { get => _terrainToolLabel; set => Set(ref _terrainToolLabel, value); }
+        public string HierarchySearchText { get => _hierarchySearchText; set => Set(ref _hierarchySearchText, value); }
+        public string OutlinerSearchText { get => _outlinerSearchText; set => Set(ref _outlinerSearchText, value); }
+        public string ContentBrowserSearchText { get => _contentBrowserSearchText; set => Set(ref _contentBrowserSearchText, value); }
+        public string ContentBrowserStatus { get => _contentBrowserStatus; set => Set(ref _contentBrowserStatus, value); }
+        public string OutputSearchText { get => _outputSearchText; set => Set(ref _outputSearchText, value); }
+        public string OutputStatus { get => _outputStatus; set => Set(ref _outputStatus, value); }
+        public string OutputLog { get => _outputLogText; set => Set(ref _outputLogText, value); }
+        public string InspectorTitle { get => _inspectorTitle; set => Set(ref _inspectorTitle, value); }
 
         // expose as string so AXAML TextBox/LabeledField can bind directly
         public string SelectedBlockName     { get => _selectedBlockName;     set => Set(ref _selectedBlockName,     value); }
@@ -110,6 +140,7 @@ namespace VoxelBlock.Editor
                 SelectedBlockHardness = value?.Hardness ?? "1.0"; // already string
                 if (value is not null)
                     SceneEditor.SetSelectedBlock(value.Name, value.R, value.G, value.B);
+                _refreshInspector();
             }
         }
 
@@ -120,6 +151,22 @@ namespace VoxelBlock.Editor
         public ObservableCollection<InventoryItem>  InventoryItems { get; } = new();
         public ObservableCollection<AssetPipelineItemView> AssetItems { get; } = new();
         public ObservableCollection<string> RegisteredCSharpScripts { get; } = new();
+        public ObservableCollection<HierarchyItemView> HierarchyItems { get; } = new();
+        public ObservableCollection<OutlinerItemView> OutlinerItems { get; } = new();
+        public ObservableCollection<ContentFolderView> ContentFolders { get; } = new();
+        public ObservableCollection<ContentAssetCardView> ContentAssets { get; } = new();
+        public ObservableCollection<InspectorSectionView> InspectorSections { get; } = new();
+
+        private ContentFolderView? _selectedContentFolder;
+        public ContentFolderView? SelectedContentFolder
+        {
+            get => _selectedContentFolder;
+            set
+            {
+                if (!Set(ref _selectedContentFolder, value)) return;
+                _rebuildContentBrowserCards();
+            }
+        }
 
         public ICommand NewWorldCommand       { get; }
         public ICommand OpenWorldCommand      { get; }
@@ -129,6 +176,12 @@ namespace VoxelBlock.Editor
         public ICommand StopCommand           { get; }
         public ICommand RegenerateCommand     { get; }
         public ICommand RunLuaCommand         { get; }
+        public ICommand ToolSelectCommand     { get; }
+        public ICommand ToolPaintCommand      { get; }
+        public ICommand ToolEraseCommand      { get; }
+        public ICommand ToolRaiseTerrainCommand { get; }
+        public ICommand ToolLowerTerrainCommand { get; }
+        public ICommand ToolFlattenTerrainCommand { get; }
         public ICommand AttachCSharpScriptCommand { get; }
         public ICommand TickCSharpScriptsCommand  { get; }
         public ICommand ResetCSharpScriptsCommand { get; }
@@ -157,6 +210,12 @@ namespace VoxelBlock.Editor
             StopCommand           = new RelayCommand(() => StatusText = "â¹ Stopped");
             RegenerateCommand     = new RelayCommand(_regenerate);
             RunLuaCommand         = new RelayCommand(_runLua);
+            ToolSelectCommand     = new RelayCommand(() => _setEditorTool("Scene", "Select"));
+            ToolPaintCommand      = new RelayCommand(() => _setEditorTool("Scene", "Paint"));
+            ToolEraseCommand      = new RelayCommand(() => _setEditorTool("Scene", "Erase"));
+            ToolRaiseTerrainCommand = new RelayCommand(() => _setEditorTool("Terrain", "Raise"));
+            ToolLowerTerrainCommand = new RelayCommand(() => _setEditorTool("Terrain", "Lower"));
+            ToolFlattenTerrainCommand = new RelayCommand(() => _setEditorTool("Terrain", "Flatten"));
             AttachCSharpScriptCommand = new RelayCommand(_attachCSharpScript);
             TickCSharpScriptsCommand  = new RelayCommand(() => _runCSharpScriptTick(1f / 60f, true));
             ResetCSharpScriptsCommand = new RelayCommand(_resetCSharpScripts);
@@ -174,8 +233,10 @@ namespace VoxelBlock.Editor
             SceneEditor.CellPainted += _onSceneCellPainted;
             ProjectFolders.EnsureAll(ProjectRootPath);
             AssetPipelineStatus = $"Watching {Path.Combine(ProjectRootPath, "Assets", "Raw")}";
+            _seedEditorShellData();
             _startAssetWatcher();
             _processAssetsNow();
+            _appendOutputLine("Editor shell ready");
         }
 
         public void Init()
@@ -295,6 +356,7 @@ namespace VoxelBlock.Editor
             _luaLog.AppendLine($"> {LuaInput}");
             if (!ok) _luaLog.AppendLine($"  ERROR: {err}");
             LuaOutput = _luaLog.ToString();
+            _appendOutputLine(ok ? $"Lua: {LuaInput}" : $"Lua error: {err}");
             LuaInput  = "";
         }
 
@@ -387,6 +449,7 @@ namespace VoxelBlock.Editor
                     AssetItems.Add(item);
 
                 AssetPipelineStatus = $"Assets: imported {report.ImportedCount}, skipped {report.SkippedCount}, errors {report.ErrorCount}";
+                _rebuildContentBrowserCards();
                 if (report.ErrorCount > 0 && report.Errors.Count > 0)
                     StatusText = $"Asset pipeline warning: {report.Errors[0]}";
             }
@@ -432,6 +495,7 @@ namespace VoxelBlock.Editor
             foreach (var bi in _engine.GetAllBlocks())
                 AllBlocks.Add(new BlockViewModel(bi));
             RefreshBlockList();
+            _refreshInspector();
         }
 
         public void RefreshBlockList()
@@ -462,6 +526,7 @@ namespace VoxelBlock.Editor
             {
                 _luaLog.AppendLine($"[{name}]");
                 LuaOutput = _luaLog.ToString();
+                _appendOutputLine($"Event: {name}");
                 _csharpScripts.DispatchEngineEvent(name, json);
                 if (name is "on_place" or "on_destroy") _refreshInventory();
             });
@@ -546,6 +611,117 @@ namespace VoxelBlock.Editor
             }
         }
 
+        private void _setEditorTool(string mode, string tool)
+        {
+            EditorModeLabel = mode;
+            TerrainToolLabel = tool;
+            StatusText = $"{mode} tool: {tool}";
+        }
+
+        private void _seedEditorShellData()
+        {
+            HierarchyItems.Clear();
+            OutlinerItems.Clear();
+            ContentFolders.Clear();
+
+            HierarchyItems.Add(new HierarchyItemView("MainScene", "SCN", 0));
+            HierarchyItems.Add(new HierarchyItemView("Cameras", "DIR", 1));
+            HierarchyItems.Add(new HierarchyItemView("Main Camera", "CAM", 2));
+            HierarchyItems.Add(new HierarchyItemView("Dynamic Cameras", "DIR", 1));
+            HierarchyItems.Add(new HierarchyItemView("Lights", "LIT", 1));
+            HierarchyItems.Add(new HierarchyItemView("Terrain", "TRN", 1));
+            HierarchyItems.Add(new HierarchyItemView("Player", "PLY", 1));
+            HierarchyItems.Add(new HierarchyItemView("Props", "DIR", 1));
+
+            OutlinerItems.Add(new OutlinerItemView("Terrain", "Terrain", "TRN"));
+            OutlinerItems.Add(new OutlinerItemView("Directional Light", "Light", "LIT"));
+            OutlinerItems.Add(new OutlinerItemView("Player", "Actor", "PLY"));
+            OutlinerItems.Add(new OutlinerItemView("VoxelChunk_0_0", "Chunk", "CHK"));
+            OutlinerItems.Add(new OutlinerItemView("VoxelChunk_0_1", "Chunk", "CHK"));
+
+            ContentFolders.Add(new ContentFolderView("Assets", 0));
+            ContentFolders.Add(new ContentFolderView("Scenes", 1));
+            ContentFolders.Add(new ContentFolderView("Visual Assets", 1));
+            ContentFolders.Add(new ContentFolderView("Textures", 2));
+            ContentFolders.Add(new ContentFolderView("Materials", 2));
+            ContentFolders.Add(new ContentFolderView("Audio", 1));
+            ContentFolders.Add(new ContentFolderView("Scripts", 1));
+            ContentFolders.Add(new ContentFolderView("Mods", 1));
+            if (ContentFolders.Count > 0)
+                SelectedContentFolder = ContentFolders[0];
+
+            _refreshInspector();
+            _rebuildContentBrowserCards();
+        }
+
+        private void _refreshInspector()
+        {
+            InspectorSections.Clear();
+            InspectorTitle = string.IsNullOrWhiteSpace(SelectedBlockName)
+                ? "Inspector - World"
+                : $"Inspector - {SelectedBlockName}";
+
+            var world = new InspectorSectionView("World");
+            world.Fields.Add(new InspectorFieldView("Name", WorldName));
+            world.Fields.Add(new InspectorFieldView("Seed", SeedText));
+            world.Fields.Add(new InspectorFieldView("Chunks Loaded", ChunkCountText));
+            world.Fields.Add(new InspectorFieldView("Engine Ready", _engineReady ? "Yes" : "No"));
+            InspectorSections.Add(world);
+
+            var scene = new InspectorSectionView("Scene");
+            scene.Fields.Add(new InspectorFieldView("Scene Name", SceneEditor.SceneName));
+            scene.Fields.Add(new InspectorFieldView("Layer Y", SceneEditor.LayerYText));
+            scene.Fields.Add(new InspectorFieldView("Rows x Cols", $"{SceneEditor.Rows} x {SceneEditor.Columns}"));
+            scene.Fields.Add(new InspectorFieldView("Tool", SceneEditor.ActiveToolLabel));
+            InspectorSections.Add(scene);
+
+            if (!string.IsNullOrWhiteSpace(SelectedBlockName))
+            {
+                var selected = new InspectorSectionView("Selected Block");
+                selected.Fields.Add(new InspectorFieldView("Name", SelectedBlockName));
+                selected.Fields.Add(new InspectorFieldView("Hardness", SelectedBlockHardness));
+                if (SelectedBlock is not null)
+                    selected.Fields.Add(new InspectorFieldView("RGB", $"{SelectedBlock.R}, {SelectedBlock.G}, {SelectedBlock.B}"));
+                InspectorSections.Add(selected);
+            }
+        }
+
+        private void _rebuildContentBrowserCards()
+        {
+            ContentAssets.Clear();
+
+            string selectedFolder = SelectedContentFolder?.Name ?? "Assets";
+            string filter = (ContentBrowserSearchText ?? "").Trim();
+
+            foreach (var item in AssetItems)
+            {
+                if (!string.IsNullOrWhiteSpace(filter) &&
+                    item.Source.IndexOf(filter, StringComparison.OrdinalIgnoreCase) < 0 &&
+                    item.Kind.IndexOf(filter, StringComparison.OrdinalIgnoreCase) < 0)
+                    continue;
+
+                ContentAssets.Add(ContentAssetCardView.FromAssetPipeline(item));
+            }
+
+            if (ContentAssets.Count == 0)
+            {
+                ContentAssets.Add(new ContentAssetCardView("Scene Builder", "tool", Brushes.SteelBlue));
+                ContentAssets.Add(new ContentAssetCardView("Lua Console", "tool", Brushes.OliveDrab));
+                ContentAssets.Add(new ContentAssetCardView("C# Scripts", "tool", Brushes.DarkSlateBlue));
+                ContentAssets.Add(new ContentAssetCardView("Export", "tool", Brushes.DarkCyan));
+            }
+
+            ContentBrowserStatus = $"{ContentAssets.Count} item(s) in {selectedFolder}";
+        }
+
+        private void _appendOutputLine(string message)
+        {
+            if (string.IsNullOrWhiteSpace(message)) return;
+            _outputLog.AppendLine($"[{DateTime.Now:HH:mm:ss}] {message}");
+            OutputLog = _outputLog.ToString();
+            OutputStatus = "Live";
+        }
+
         public event PropertyChangedEventHandler? PropertyChanged;
 
         private bool Set<T>(ref T field, T value, [CallerMemberName] string prop = "")
@@ -584,6 +760,7 @@ namespace VoxelBlock.Editor
         {
             _csharpScriptLog.AppendLine(message);
             CSharpScriptOutput = _csharpScriptLog.ToString();
+            _appendOutputLine(message);
         }
     }
 
@@ -613,6 +790,98 @@ namespace VoxelBlock.Editor
         {
             Name      = name;
             CountText = count.ToString();
+        }
+    }
+
+    public sealed class HierarchyItemView
+    {
+        public string Name { get; }
+        public string Icon { get; }
+        public Thickness Indent { get; }
+
+        public HierarchyItemView(string name, string icon, int depth)
+        {
+            Name = name;
+            Icon = icon;
+            Indent = new Thickness(depth * 12, 2, 0, 2);
+        }
+    }
+
+    public sealed class OutlinerItemView
+    {
+        public string Name { get; }
+        public string Kind { get; }
+        public string Icon { get; }
+
+        public OutlinerItemView(string name, string kind, string icon)
+        {
+            Name = name;
+            Kind = kind;
+            Icon = icon;
+        }
+    }
+
+    public sealed class InspectorFieldView
+    {
+        public string Name { get; }
+        public string Value { get; }
+
+        public InspectorFieldView(string name, string value)
+        {
+            Name = name;
+            Value = value;
+        }
+    }
+
+    public sealed class InspectorSectionView
+    {
+        public string Title { get; }
+        public ObservableCollection<InspectorFieldView> Fields { get; } = new();
+
+        public InspectorSectionView(string title)
+        {
+            Title = title;
+        }
+    }
+
+    public sealed class ContentFolderView
+    {
+        public string Name { get; }
+        public Thickness Indent { get; }
+
+        public ContentFolderView(string name, int depth)
+        {
+            Name = name;
+            Indent = new Thickness(depth * 12, 2, 0, 2);
+        }
+
+        public override string ToString() => Name;
+    }
+
+    public sealed class ContentAssetCardView
+    {
+        public string Name { get; }
+        public string Kind { get; }
+        public IBrush PreviewBrush { get; }
+
+        public ContentAssetCardView(string name, string kind, IBrush previewBrush)
+        {
+            Name = name;
+            Kind = kind;
+            PreviewBrush = previewBrush;
+        }
+
+        public static ContentAssetCardView FromAssetPipeline(AssetPipelineItemView item)
+        {
+            IBrush brush = item.Kind.ToLowerInvariant() switch
+            {
+                "texture" => Brushes.CornflowerBlue,
+                "audio" => Brushes.SeaGreen,
+                "mesh" => Brushes.Peru,
+                _ => Brushes.Gray
+            };
+            string name = Path.GetFileName(item.Source);
+            return new ContentAssetCardView(name, item.Kind, brush);
         }
     }
 
