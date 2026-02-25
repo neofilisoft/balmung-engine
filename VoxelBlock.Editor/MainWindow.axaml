@@ -8,21 +8,21 @@
 
   <DockPanel>
 
-    <!-- ── Menu ──────────────────────────────────────────────────────────── -->
+    <!-- â”€â”€ Menu â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ -->
     <Menu DockPanel.Dock="Top" Background="#2D2D2D">
       <MenuItem Header="_File">
         <MenuItem Header="_New World"   Command="{Binding NewWorldCommand}"/>
-        <MenuItem Header="_Open World…" Command="{Binding OpenWorldCommand}"/>
+        <MenuItem Header="_Open Worldâ€¦" Command="{Binding OpenWorldCommand}"/>
         <MenuItem Header="_Save"        Command="{Binding SaveCommand}"/>
         <Separator/>
         <MenuItem Header="Save _Scene"  Command="{Binding SaveSceneCommand}"/>
         <MenuItem Header="Load Sc_ene"  Command="{Binding LoadSceneCommand}"/>
-        <MenuItem Header="_Export Game…" Command="{Binding ExportStandaloneCommand}"/>
+        <MenuItem Header="_Export Gameâ€¦" Command="{Binding ExportStandaloneCommand}"/>
         <Separator/>
         <MenuItem Header="E_xit"        Command="{Binding ExitCommand}"/>
       </MenuItem>
       <MenuItem Header="_World">
-        <MenuItem Header="World Settings…" Command="{Binding WorldSettingsCommand}"/>
+        <MenuItem Header="World Settingsâ€¦" Command="{Binding WorldSettingsCommand}"/>
         <MenuItem Header="Reload Mods"     Command="{Binding ReloadModsCommand}"/>
       </MenuItem>
       <MenuItem Header="_View">
@@ -31,8 +31,6 @@
         <MenuItem Header="Render Stats"    Command="{Binding ShowStatsCommand}"/>
       </MenuItem>
     </Menu>
-
-    <!-- FIX ④: Avalonia 11 has no <StatusBar> control → use <Border> instead -->
     <Border DockPanel.Dock="Bottom" Background="#007ACC" Height="24">
       <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Spacing="12">
         <TextBlock Text="{Binding StatusText}" Foreground="White"    Margin="8,0"/>
@@ -41,18 +39,16 @@
       </StackPanel>
     </Border>
 
-    <!-- ── Main 3-panel layout ────────────────────────────────────────────── -->
+    <!-- â”€â”€ Main 3-panel layout â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ -->
     <Grid ColumnDefinitions="220,*,280">
 
-      <!-- ── Left: Block Palette ──────────────────────────────────────────── -->
+      <!-- â”€â”€ Left: Block Palette â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ -->
       <DockPanel Grid.Column="0" Background="#252526">
         <TextBlock DockPanel.Dock="Top" Text="BLOCKS" FontSize="11" FontWeight="Bold"
                    Foreground="#888" Margin="10,8,0,4"/>
-        <TextBox DockPanel.Dock="Top" Watermark="🔍 Filter…"
+        <TextBox DockPanel.Dock="Top" Watermark="ðŸ” Filterâ€¦"
                  Text="{Binding BlockFilter}" Background="#3C3C3C"
                  Foreground="White" Margin="6,0,6,4" CornerRadius="4"/>
-
-        <!-- FIX ⑦: Avalonia 11 uses ItemsSource= not Items= -->
         <ListBox ItemsSource="{Binding FilteredBlocks}"
                  SelectedItem="{Binding SelectedBlock}"
                  Background="Transparent" Margin="4">
@@ -68,7 +64,7 @@
         </ListBox>
       </DockPanel>
 
-      <!-- ── Centre: Viewport + Toolbar ──────────────────────────────────── -->
+      <!-- â”€â”€ Centre: Viewport + Toolbar â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ -->
       <Grid Grid.Column="1">
         <Grid.RowDefinitions>
           <RowDefinition Height="*"/>
@@ -77,7 +73,6 @@
 
         <TabControl Grid.Row="0" Background="#1E1E1E">
           <TabItem Header="Viewport" Foreground="#CCC">
-            <!-- FIX ②③⑤⑥: ViewportPanel replaces broken OpenGlViewport -->
             <local:ViewportPanel EngineHandle="{Binding EngineHandle}"/>
           </TabItem>
           <TabItem Header="Scene Builder" Foreground="#CCC">
@@ -103,8 +98,8 @@
 
         <StackPanel Grid.Row="1" Orientation="Horizontal" Spacing="6"
                     Background="#2D2D2D" Height="36">
-          <Button Content="▶ Play"    Command="{Binding PlayCommand}"    Margin="6,4"/>
-          <Button Content="⏹ Stop"    Command="{Binding StopCommand}"    Margin="0,4"/>
+          <Button Content="â–¶ Play"    Command="{Binding PlayCommand}"    Margin="6,4"/>
+          <Button Content="â¹ Stop"    Command="{Binding StopCommand}"    Margin="0,4"/>
           <Separator/>
           <Button Content="Save Scene" Command="{Binding SaveSceneCommand}" Margin="0,4"/>
           <Button Content="Load Scene" Command="{Binding LoadSceneCommand}" Margin="0,4"/>
@@ -117,7 +112,7 @@
         </StackPanel>
       </Grid>
 
-      <!-- ── Right: Properties / Lua / Stats ──────────────────────────────── -->
+      <!-- â”€â”€ Right: Properties / Lua / Stats â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ -->
       <TabControl Grid.Column="2" Background="#252526">
 
         <!-- Properties tab -->
@@ -126,27 +121,21 @@
             <StackPanel Spacing="8">
               <TextBlock Text="WORLD" FontWeight="Bold" Foreground="#888" FontSize="11"/>
               <local:LabeledField Label="Name"          Value="{Binding WorldName}"/>
-              <!-- FIX ⑧: SeedText is already string; no conversion needed -->
               <local:LabeledField Label="Seed"          Value="{Binding SeedText}" IsReadOnly="True"/>
-              <!-- FIX ⑧: ChunkCountText is a pre-formatted string property -->
               <local:LabeledField Label="Chunks Loaded" Value="{Binding ChunkCountText}" IsReadOnly="True"/>
 
               <Separator Margin="0,4"/>
               <TextBlock Text="SELECTED BLOCK" FontWeight="Bold" Foreground="#888" FontSize="11"/>
               <local:LabeledField Label="Block"    Value="{Binding SelectedBlockName}" IsReadOnly="True"/>
-              <!-- FIX ⑨: HardnessText is pre-formatted string, not float -->
               <local:LabeledField Label="Hardness" Value="{Binding SelectedBlockHardness}" IsReadOnly="True"/>
 
               <Separator Margin="0,4"/>
               <TextBlock Text="INVENTORY" FontWeight="Bold" Foreground="#888" FontSize="11"/>
-
-              <!-- FIX ⑦: ItemsSource= -->
               <ItemsControl ItemsSource="{Binding InventoryItems}">
                 <ItemsControl.ItemTemplate>
                   <DataTemplate>
                     <Grid ColumnDefinitions="*,60" Margin="0,2">
                       <TextBlock Grid.Column="0" Text="{Binding Name}"      Foreground="#DDD"/>
-                      <!-- FIX ⑧: CountText is pre-formatted string not int -->
                       <TextBlock Grid.Column="1" Text="{Binding CountText}" Foreground="#AAA"
                                  HorizontalAlignment="Right"/>
                     </Grid>
@@ -166,7 +155,7 @@
                        Watermark="print('hello')"
                        Background="#3C3C3C" Foreground="White"
                        Width="210"/>
-              <Button Content="Run ▶" Command="{Binding RunLuaCommand}" Width="60"/>
+              <Button Content="Run â–¶" Command="{Binding RunLuaCommand}" Width="60"/>
             </StackPanel>
             <ScrollViewer>
               <TextBlock Text="{Binding LuaOutput}"
@@ -176,10 +165,37 @@
           </DockPanel>
         </TabItem>
 
+        <TabItem Header="C# Scripts" Foreground="#CCC">
+          <DockPanel Margin="8">
+            <StackPanel DockPanel.Dock="Top" Spacing="6">
+              <TextBlock Text="{Binding CSharpScriptStatus}" Foreground="#9ad" TextWrapping="Wrap"/>
+              <StackPanel Orientation="Horizontal" Spacing="6">
+                <TextBlock Text="Script" Foreground="#AAA" VerticalAlignment="Center"/>
+                <TextBox Text="{Binding CSharpScriptInput}" Width="160"
+                         Background="#3C3C3C" Foreground="White"/>
+                <Button Content="Attach" Command="{Binding AttachCSharpScriptCommand}" Width="70"/>
+                <Button Content="Tick" Command="{Binding TickCSharpScriptsCommand}" Width="60"/>
+                <Button Content="Reset" Command="{Binding ResetCSharpScriptsCommand}" Width="60"/>
+              </StackPanel>
+              <ItemsControl ItemsSource="{Binding RegisteredCSharpScripts}">
+                <ItemsControl.ItemTemplate>
+                  <DataTemplate>
+                    <TextBlock Text="{Binding .}" Foreground="#BBB" FontSize="12"/>
+                  </DataTemplate>
+                </ItemsControl.ItemTemplate>
+              </ItemsControl>
+            </StackPanel>
+            <ScrollViewer Margin="0,8,0,0">
+              <TextBlock Text="{Binding CSharpScriptOutput}" Foreground="#BEE3A8"
+                         FontFamily="Courier New" FontSize="12"
+                         TextWrapping="Wrap" Padding="4"/>
+            </ScrollViewer>
+          </DockPanel>
+        </TabItem>
+
         <!-- Stats tab -->
         <TabItem Header="Stats" Foreground="#CCC">
           <StackPanel Spacing="4" Margin="10">
-            <!-- FIX ⑧: all stats exposed as pre-formatted string properties -->
             <local:StatRow Label="Chunks Drawn" Value="{Binding Stats.ChunksDrawnText}"/>
             <local:StatRow Label="Draw Calls"   Value="{Binding Stats.DrawCallsText}"/>
             <local:StatRow Label="Triangles"    Value="{Binding Stats.TrianglesText}"/>
