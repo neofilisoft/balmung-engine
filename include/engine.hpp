@@ -23,6 +23,11 @@ namespace VoxelBlock {
 class Window;
 
 struct EngineConfig {
+    enum class RuntimeProfile {
+        GameEngine,
+        Framework,
+    };
+
     int         viewport_w    = 1280;
     int         viewport_h    = 720;
     bool        headless      = false;
@@ -30,6 +35,9 @@ struct EngineConfig {
     int         render_dist   = 5;
     std::string mods_dir      = "mods";
     std::string saves_dir     = "saves";
+    RuntimeProfile runtime_profile = RuntimeProfile::GameEngine;
+
+    bool is_framework_mode() const { return runtime_profile == RuntimeProfile::Framework; }
 };
 
 class Engine {
@@ -54,34 +62,3 @@ public:
 
     const World&     world()    const { return _world; }
     const EngineConfig& config()const { return _cfg;   }
-
-    // Event bridge (for C-API callbacks → C# delegates)
-    using EventBridgeCb = std::function<void(const std::string& name, const std::string& json)>;
-    void add_event_bridge(EventBridgeCb cb);
-
-    // Render-to-texture output (editor uses this)
-    uint32_t scene_texture_id() const { return _renderer.scene_texture_id(); }
-    void resize_viewport(int w, int h) { _renderer.resize(w, h); }
-
-private:
-    EngineConfig   _cfg;
-    World          _world;
-    Inventory      _inv;
-    Camera         _cam;
-    Renderer       _renderer;
-    LuaRuntime     _lua;
-    SaveManager    _save;
-    Player         _player;
-
-    std::unique_ptr<Window> _window;  // null when headless
-    bool _running = false;
-
-    float _auto_save_timer = 0.f;
-
-    void _handle_input(float dt);
-    void _register_event_bridges();
-
-    std::vector<EventBridgeCb> _bridges;
-};
-
-} // namespace VoxelBlock
