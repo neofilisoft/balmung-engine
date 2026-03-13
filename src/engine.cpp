@@ -1,6 +1,3 @@
-#if __has_include(<GLFW/glfw3.h>)
-#  include <GLFW/glfw3.h>
-#  define VB_HAS_GLFW 1
 #else
 #  define VB_HAS_GLFW 0
 #endif
@@ -26,12 +23,15 @@ bool Engine::init() {
     CraftingSystem::register_defaults();
 
     // ── World (load or generate) ──────────────────────────────────────────────
-    bool loaded = _save.load_into_engine(_cfg.world_name, _world, _inv,
-                                          _cfg.render_dist);
-    if (!loaded) {
-        // Give default starting items
-        for (auto& bt : {"grass","dirt","stone","wood","leaves","sand","planks","cobble"})
-            _inv.add_item(bt, 64);
+    bool loaded = true;
+    if (!_cfg.is_framework_mode()) {
+        loaded = _save.load_into_engine(_cfg.world_name, _world, _inv,
+                                        _cfg.render_dist);
+        if (!loaded) {
+            // Give default starting items
+            for (auto& bt : {"grass","dirt","stone","wood","leaves","sand","planks","cobble"})
+                _inv.add_item(bt, 64);
+        }
     }
     std::cout << "[Engine] World '" << _cfg.world_name
               << "' — seed=" << _world.seed()
@@ -46,7 +46,7 @@ bool Engine::init() {
         WindowConfig wcfg;
         wcfg.width  = _cfg.viewport_w;
         wcfg.height = _cfg.viewport_h;
-        wcfg.title  = "VoxelBlock Engine v2.0";
+        wcfg.title  = _cfg.is_framework_mode() ? "VoxelBlock Framework v2.0" : "VoxelBlock Engine v2.0";
         _window = std::make_unique<Window>(wcfg);
 
         // Wire window callbacks → engine
@@ -94,11 +94,14 @@ bool Engine::init() {
         return false;
 
     // ── Lua mods ──────────────────────────────────────────────────────────────
-    _lua.init(&_world, &_inv);
-    _lua.load_mods(_cfg.mods_dir);
+    if (!_cfg.is_framework_mode()) {
+        _lua.init(&_world, &_inv);
+        _lua.load_mods(_cfg.mods_dir);
+    }
 
     // ── Event bridge ──────────────────────────────────────────────────────────
-    _register_event_bridges();
+    if (!_cfg.is_framework_mode())
+        _register_event_bridges();
 
     _running = true;
     std::cout << "[Engine] Init complete.\n";
@@ -135,19 +138,21 @@ void Engine::tick(float dt) {
         _handle_input(dt);
     }
 
-    // Chunk streaming
-    static float chunk_timer = 0.f;
-    chunk_timer += dt;
-    if (chunk_timer >= 2.f) {
-        chunk_timer = 0.f;
-        _world.update_chunks(_cam.position.x, _cam.position.z);
-    }
+    if (!_cfg.is_framework_mode()) {
+        // Chunk streaming
+        static float chunk_timer = 0.f;
+        chunk_timer += dt;
+        if (chunk_timer >= 2.f) {
+            chunk_timer = 0.f;
+            _world.update_chunks(_cam.position.x, _cam.position.z);
+        }
 
-    // Auto-save
-    _auto_save_timer += dt;
-    if (_auto_save_timer >= 300.f) {
-        _auto_save_timer = 0.f;
-        _save.save(_cfg.world_name, _world, _inv);
+        // Auto-save
+        _auto_save_timer += dt;
+        if (_auto_save_timer >= 300.f) {
+            _auto_save_timer = 0.f;
+            _save.save(_cfg.world_name, _world, _inv);
+        }
     }
 
     // Render
@@ -181,7 +186,8 @@ void Engine::_handle_input(float dt) {
 
 bool Engine::running() const { return _running; }
 void Engine::quit() {
-    _save.save(_cfg.world_name, _world, _inv);
+    if (!_cfg.is_framework_mode())
+        _save.save(_cfg.world_name, _world, _inv);
     _running = false;
     std::cout << "[Engine] Quit.\n";
 }
