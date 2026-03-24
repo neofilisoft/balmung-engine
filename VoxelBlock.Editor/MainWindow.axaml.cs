@@ -1,0 +1,933 @@
+﻿// VoxelBlock.Editor â€” MainWindow.axaml.cs + MainViewModel.cs
+
+using System;
+using System.Collections.Generic;
+using System.Collections.ObjectModel;
+using System.ComponentModel;
+using System.IO;
+using System.Runtime.CompilerServices;
+using System.Text;
+using System.Windows.Input;
+using Avalonia;
+using Avalonia.Controls;
+using Avalonia.Media;
+using Avalonia.Threading;
+using VoxelBlock.Bridge;
+using VoxelBlock.Bridge.Scripting;
+
+namespace VoxelBlock.Editor
+{
+
+    public partial class MainWindow : Window
+    {
+        private MainViewModel _vm = null!;
+
+        public MainWindow()
+        {
+            InitializeComponent();
+            _vm         = new MainViewModel();
+            DataContext = _vm;
+            _vm.Init();
+        }
+
+        private void InitializeComponent()
+            => Avalonia.Markup.Xaml.AvaloniaXamlLoader.Load(this);
+
+        protected override void OnClosed(EventArgs e)
+        {
+            _vm.Dispose();
+            base.OnClosed(e);
+        }
+    }
+
+    // MainViewModel
+
+    public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
+    {
+        private VoxelBlockEngine? _engine;
+        private DispatcherTimer?  _ticker;
+        private DispatcherTimer?  _assetTicker;
+        private bool              _engineReady;
+        private bool              _assetPipelineBusy;
+        private long              _assetFingerprint;
+        private readonly StringBuilder _luaLog = new();
+        private readonly StringBuilder _csharpScriptLog = new();
+        private readonly StringBuilder _outputLog = new();
+        private readonly AssetPipelineService _assetPipeline = new();
+        private readonly StandaloneExportService _exportService = new();
+        private readonly VoxelScriptContext _scriptContext;
+        private readonly CSharpScriptRuntime _csharpScripts;
+
+        private string _statusText          = "Initialisingâ€¦";
+        private string _statsText           = "";
+        private string _worldName           = "world1";
+        private string _seedText            = "0";
+        private string _chunkCountText      = "0";      
+        private string _blockFilter         = "";
+        private string _luaInput            = "";
+        private string _luaOutput           = "";
+        private string _csharpScriptInput   = "EditorHeartbeat";
+        private string _csharpScriptOutput  = "";
+        private string _csharpScriptStatus  = "C# scripting runtime ready";
+        private string _editorModeLabel     = "Scene";
+        private string _terrainToolLabel    = "Select";
+        private string _hierarchySearchText = "";
+        private string _outlinerSearchText  = "";
+        private string _contentBrowserSearchText = "";
+        private string _contentBrowserStatus = "0 assets";
+        private string _outputSearchText = "";
+        private string _outputStatus = "Ready";
+        private string _outputLogText = "";
+        private string _inspectorTitle = "Inspector";
+        private string _selectedBlockName    = "";       
+        private string _selectedBlockHardness = "1.0"; 
+        private string _assetPipelineStatus = "Idle";
+        private string _exportStatus = "Idle";
+        private string _exportBuildName = "Build1";
+        private BlockViewModel? _selectedBlock;
+        private StatsViewModel  _stats = new();
+        private long            _engineHandle;
+
+        public string StatusText
+        {
+            get => _statusText;
+            set
+            {
+                if (Set(ref _statusText, value))
+                    _appendOutputLine(value);
+            }
+        }
+        public string StatsText    { get => _statsText;    set => Set(ref _statsText,    value); }
+        public string WorldName    { get => _worldName;    set => Set(ref _worldName,    value); }
+        public string SeedText     { get => _seedText;     set => Set(ref _seedText,     value); }
+        public string ChunkCountText { get => _chunkCountText; set => Set(ref _chunkCountText, value); } 
+        public string BlockFilter  { get => _blockFilter;
+                                     set { Set(ref _blockFilter, value); RefreshBlockList(); } }
+        public string LuaInput     { get => _luaInput;     set => Set(ref _luaInput,     value); }
+        public string LuaOutput    { get => _luaOutput;    set => Set(ref _luaOutput,    value); }
+        public string CSharpScriptInput  { get => _csharpScriptInput;  set => Set(ref _csharpScriptInput, value); }
+        public string CSharpScriptOutput { get => _csharpScriptOutput; set => Set(ref _csharpScriptOutput, value); }
+        public string CSharpScriptStatus { get => _csharpScriptStatus; set => Set(ref _csharpScriptStatus, value); }
+        public string EditorModeLabel { get => _editorModeLabel; set => Set(ref _editorModeLabel, value); }
+        public string TerrainToolLabel { get => _terrainToolLabel; set => Set(ref _terrainToolLabel, value); }
+        public string HierarchySearchText { get => _hierarchySearchText; set => Set(ref _hierarchySearchText, value); }
+        public string OutlinerSearchText { get => _outlinerSearchText; set => Set(ref _outlinerSearchText, value); }
+        public string ContentBrowserSearchText { get => _contentBrowserSearchText; set => Set(ref _contentBrowserSearchText, value); }
+        public string ContentBrowserStatus { get => _contentBrowserStatus; set => Set(ref _contentBrowserStatus, value); }
+        public string OutputSearchText { get => _outputSearchText; set => Set(ref _outputSearchText, value); }
+        public string OutputStatus { get => _outputStatus; set => Set(ref _outputStatus, value); }
+        public string OutputLog { get => _outputLogText; set => Set(ref _outputLogText, value); }
+        public string InspectorTitle { get => _inspectorTitle; set => Set(ref _inspectorTitle, value); }
+
+        // expose as string so AXAML TextBox/LabeledField can bind directly
+        public string SelectedBlockName     { get => _selectedBlockName;     set => Set(ref _selectedBlockName,     value); }
+        public string SelectedBlockHardness { get => _selectedBlockHardness; set => Set(ref _selectedBlockHardness, value); }
+        public string AssetPipelineStatus   { get => _assetPipelineStatus;   set => Set(ref _assetPipelineStatus, value); }
+        public string ExportStatus          { get => _exportStatus;          set => Set(ref _exportStatus, value); }
+        public string ExportBuildName       { get => _exportBuildName;       set => Set(ref _exportBuildName, value); }
+        public string ProjectRootPath       { get; } = Directory.GetCurrentDirectory();
+
+        public long EngineHandle => _engineHandle;
+        public SceneEditorState SceneEditor { get; } = new(24, 24);
+
+        public BlockViewModel? SelectedBlock
+        {
+            get => _selectedBlock;
+            set
+            {
+                Set(ref _selectedBlock, value);
+                SelectedBlockName     = value?.Name     ?? "";
+                SelectedBlockHardness = value?.Hardness ?? "1.0"; // already string
+                if (value is not null)
+                    SceneEditor.SetSelectedBlock(value.Name, value.R, value.G, value.B);
+                _refreshInspector();
+            }
+        }
+
+        public StatsViewModel Stats { get => _stats; set => Set(ref _stats, value); }
+
+        public ObservableCollection<BlockViewModel> AllBlocks      { get; } = new();
+        public ObservableCollection<BlockViewModel> FilteredBlocks { get; } = new();
+        public ObservableCollection<InventoryItem>  InventoryItems { get; } = new();
+        public ObservableCollection<AssetPipelineItemView> AssetItems { get; } = new();
+        public ObservableCollection<string> RegisteredCSharpScripts { get; } = new();
+        public ObservableCollection<HierarchyItemView> HierarchyItems { get; } = new();
+        public ObservableCollection<OutlinerItemView> OutlinerItems { get; } = new();
+        public ObservableCollection<ContentFolderView> ContentFolders { get; } = new();
+        public ObservableCollection<ContentAssetCardView> ContentAssets { get; } = new();
+        public ObservableCollection<InspectorSectionView> InspectorSections { get; } = new();
+
+        private ContentFolderView? _selectedContentFolder;
+        public ContentFolderView? SelectedContentFolder
+        {
+            get => _selectedContentFolder;
+            set
+            {
+                if (!Set(ref _selectedContentFolder, value)) return;
+                _rebuildContentBrowserCards();
+            }
+        }
+
+        public ICommand NewWorldCommand       { get; }
+        public ICommand OpenWorldCommand      { get; }
+        public ICommand SaveCommand           { get; }
+        public ICommand ExitCommand           { get; }
+        public ICommand PlayCommand           { get; }
+        public ICommand StopCommand           { get; }
+        public ICommand RegenerateCommand     { get; }
+        public ICommand RunLuaCommand         { get; }
+        public ICommand ToolSelectCommand     { get; }
+        public ICommand ToolPaintCommand      { get; }
+        public ICommand ToolEraseCommand      { get; }
+        public ICommand ToolRaiseTerrainCommand { get; }
+        public ICommand ToolLowerTerrainCommand { get; }
+        public ICommand ToolFlattenTerrainCommand { get; }
+        public ICommand AttachCSharpScriptCommand { get; }
+        public ICommand TickCSharpScriptsCommand  { get; }
+        public ICommand ResetCSharpScriptsCommand { get; }
+        public ICommand ReloadModsCommand     { get; }
+        public ICommand WorldSettingsCommand  { get; }
+        public ICommand ShowBlocksCommand     { get; }
+        public ICommand ShowLuaConsoleCommand { get; }
+        public ICommand ShowStatsCommand      { get; }
+        public ICommand SaveSceneCommand      { get; }
+        public ICommand LoadSceneCommand      { get; }
+        public ICommand ClearSceneCommand     { get; }
+        public ICommand ProcessAssetsCommand  { get; }
+        public ICommand ExportStandaloneCommand { get; }
+
+        public MainViewModel()
+        {
+            _scriptContext = new VoxelScriptContext(() => _engine, _appendCSharpScriptLog);
+            _csharpScripts = new CSharpScriptRuntime(_scriptContext);
+            _registerDefaultCSharpScripts();
+
+            NewWorldCommand       = new RelayCommand(_newWorld);
+            OpenWorldCommand      = new RelayCommand(() => StatusText = "Open â€” file dialog (Phase 4)");
+            SaveCommand           = new RelayCommand(_save);
+            ExitCommand           = new RelayCommand(() => Environment.Exit(0));
+            PlayCommand           = new RelayCommand(() => StatusText = "â–¶ Play mode");
+            StopCommand           = new RelayCommand(() => StatusText = "â¹ Stopped");
+            RegenerateCommand     = new RelayCommand(_regenerate);
+            RunLuaCommand         = new RelayCommand(_runLua);
+            ToolSelectCommand     = new RelayCommand(() => _setEditorTool("Scene", "Select"));
+            ToolPaintCommand      = new RelayCommand(() => _setEditorTool("Scene", "Paint"));
+            ToolEraseCommand      = new RelayCommand(() => _setEditorTool("Scene", "Erase"));
+            ToolRaiseTerrainCommand = new RelayCommand(() => _setEditorTool("Terrain", "Raise"));
+            ToolLowerTerrainCommand = new RelayCommand(() => _setEditorTool("Terrain", "Lower"));
+            ToolFlattenTerrainCommand = new RelayCommand(() => _setEditorTool("Terrain", "Flatten"));
+            AttachCSharpScriptCommand = new RelayCommand(_attachCSharpScript);
+            TickCSharpScriptsCommand  = new RelayCommand(() => _runCSharpScriptTick(1f / 60f, true));
+            ResetCSharpScriptsCommand = new RelayCommand(_resetCSharpScripts);
+            ReloadModsCommand     = new RelayCommand(_reloadMods);
+            WorldSettingsCommand  = new RelayCommand(() => StatusText = "World Settings");
+            ShowBlocksCommand     = new RelayCommand(() => StatusText = "Block Registry");
+            ShowLuaConsoleCommand = new RelayCommand(() => StatusText = "Lua Console");
+            ShowStatsCommand      = new RelayCommand(() => StatusText = "Render Stats");
+            SaveSceneCommand      = new RelayCommand(_saveScene);
+            LoadSceneCommand      = new RelayCommand(_loadScene);
+            ClearSceneCommand     = new RelayCommand(_clearScene);
+            ProcessAssetsCommand  = new RelayCommand(_processAssetsNow);
+            ExportStandaloneCommand = new RelayCommand(_exportStandalone);
+
+            SceneEditor.CellPainted += _onSceneCellPainted;
+            ProjectFolders.EnsureAll(ProjectRootPath);
+            AssetPipelineStatus = $"Watching {Path.Combine(ProjectRootPath, "Assets", "Raw")}";
+            _seedEditorShellData();
+            _startAssetWatcher();
+            _processAssetsNow();
+            _appendOutputLine("Editor shell ready");
+        }
+
+        public void Init()
+        {
+            try
+            {
+                _engine = new VoxelBlockEngine();
+                _engine.OnEngineEvent += _onEngineEvent;
+
+                bool ok = _engine.InitHeadless(1280, 720);
+                if (!ok)
+                {
+                    _seedFallbackBlockPaletteIfNeeded();
+                    StatusText = "âš  Engine init failed â€” native library missing?";
+                    
+                    return;
+                }
+
+                _engineReady  = true;
+                _engineHandle = _engine.Handle;
+                OnPropertyChanged(nameof(EngineHandle));
+
+                _refreshBlockRegistry();
+
+                _engine.AddItem("grass", 64);
+                _engine.AddItem("stone", 64);
+                _engine.AddItem("wood",  32);
+                _engine.AddItem("dirt",  64);
+                _refreshInventory();
+                if (AllBlocks.Count > 0)
+                    SelectedBlock = AllBlocks[0];
+
+                _startAssetWatcher();
+                _processAssetsNow();
+
+                _ticker = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(16.67) };
+                _ticker.Tick += (_, _) => _frame();
+                _ticker.Start();
+
+                SeedText   = _engine.WorldSeed.ToString();
+                StatusText = $"âœ… '{WorldName}' ready â€” seed {_engine.WorldSeed}";
+            }
+            catch (Exception ex)
+            {
+                StatusText = $"âŒ {ex.GetType().Name}: {ex.Message}";
+            }
+        }
+
+        private float _statTimer;
+
+        private void _frame()
+        {
+            if (!_engineReady || _engine is null || !_engine.IsValid) return;
+
+            try { _engine.Tick(1f / 60f); }
+            catch (Exception ex)
+            {
+                StatusText   = $"âš  Tick error: {ex.Message}";
+                _engineReady = false;
+                _ticker?.Stop();
+                return;
+            }
+
+            _runCSharpScriptTick(1f / 60f, false);
+
+            _statTimer += 1f / 60f;
+            if (_statTimer < 0.5f) return;
+            _statTimer = 0f;
+
+            var s = _engine.GetStats();
+            Stats = new StatsViewModel
+            {
+                ChunksDrawnText = s.ChunksDrawn.ToString(),
+                DrawCallsText   = s.DrawCalls.ToString(),
+                TrianglesText   = s.Triangles.ToString("N0"),
+                FrameMs         = s.FrameMs,
+            };
+
+            int chunks = _engine.ChunkCount;
+            ChunkCountText = chunks.ToString(); 
+            StatsText = $"Chunks: {chunks} | {s.FrameMs:F1} ms | ~{(s.FrameMs > 0 ? 1000f / s.FrameMs : 0):F0} FPS";
+        }
+
+        private void _newWorld()
+        {
+            if (!_engineReady || _engine is null) return;
+            WorldName = "world_new";
+            _engine.LoadWorld(WorldName);
+            _refreshBlockRegistry();
+            StatusText = $"New world '{WorldName}'";
+        }
+
+        private void _save()
+        {
+            if (!_engineReady || _engine is null) return;
+            bool ok = _engine.SaveWorld(WorldName);
+            var scene = SceneEditor.SaveToProject(ProjectRootPath);
+            StatusText = ok
+                ? (scene.ok ? $"Saved world + scene '{SceneEditor.SceneName}'" : $"World saved; scene save failed: {scene.message}")
+                : "Save failed";
+        }
+
+        private void _regenerate()
+        {
+            if (!_engineReady || _engine is null) return;
+            _engine.LoadWorld(WorldName);
+            ChunkCountText = _engine.ChunkCount.ToString();
+            SeedText       = _engine.WorldSeed.ToString();
+            StatusText     = $"Regenerated â€” seed {_engine.WorldSeed}";
+        }
+
+        private void _runLua()
+        {
+            if (!_engineReady || _engine is null) return;
+            if (string.IsNullOrWhiteSpace(LuaInput)) return;
+            var (ok, err) = _engine.ExecLua(LuaInput);
+            _luaLog.AppendLine($"> {LuaInput}");
+            if (!ok) _luaLog.AppendLine($"  ERROR: {err}");
+            LuaOutput = _luaLog.ToString();
+            _appendOutputLine(ok ? $"Lua: {LuaInput}" : $"Lua error: {err}");
+            LuaInput  = "";
+        }
+
+        private void _reloadMods()
+        {
+            if (!_engineReady || _engine is null) return;
+            int n = _engine.LoadMods("mods");
+            _refreshBlockRegistry();
+            StatusText = $"ðŸ”„ {n} mod(s) loaded";
+        }
+
+        private void _attachCSharpScript()
+        {
+            string name = (CSharpScriptInput ?? "").Trim();
+            if (string.IsNullOrWhiteSpace(name))
+            {
+                CSharpScriptStatus = "Enter a C# script name";
+                return;
+            }
+
+            if (_csharpScripts.TryAttach(name, out var instance, out var error))
+            {
+                CSharpScriptStatus = $"Attached C# script: {name} ({_csharpScripts.ActiveScriptCount} active)";
+                _appendCSharpScriptLog($"attached {name} ({instance!.InstanceId.ToString()[..8]})");
+            }
+            else
+            {
+                CSharpScriptStatus = error ?? "Attach failed";
+                _appendCSharpScriptLog(CSharpScriptStatus);
+            }
+        }
+
+        private void _runCSharpScriptTick(float dt, bool manual)
+        {
+            try
+            {
+                _csharpScripts.Tick(dt);
+                if (manual)
+                    CSharpScriptStatus = $"C# scripts ticked ({_csharpScripts.ActiveScriptCount} active)";
+            }
+            catch (Exception ex)
+            {
+                CSharpScriptStatus = $"C# script runtime error: {ex.Message}";
+                _appendCSharpScriptLog(CSharpScriptStatus);
+            }
+        }
+
+        private void _resetCSharpScripts()
+        {
+            _csharpScripts.Reset();
+            CSharpScriptStatus = "C# scripts reset";
+            _appendCSharpScriptLog("reset all scripts");
+        }
+
+        private void _saveScene()
+        {
+            var result = SceneEditor.SaveToProject(ProjectRootPath);
+            StatusText = result.ok ? $"Scene saved: {result.message}" : $"Scene save failed: {result.message}";
+        }
+
+        private void _loadScene()
+        {
+            var result = SceneEditor.LoadFromProject(ProjectRootPath);
+            if (!result.ok)
+            {
+                StatusText = $"Scene load failed: {result.message}";
+                return;
+            }
+
+            _syncSceneToEngine();
+            StatusText = $"Scene loaded: {result.message}";
+        }
+
+        private void _clearScene()
+        {
+            SceneEditor.Clear();
+            _syncSceneToEngine();
+            StatusText = $"Scene '{SceneEditor.SceneName}' cleared";
+        }
+
+        private void _processAssetsNow()
+        {
+            if (_assetPipelineBusy) return;
+            _assetPipelineBusy = true;
+            try
+            {
+                var report = _assetPipeline.Process(ProjectRootPath);
+                AssetItems.Clear();
+                foreach (var item in report.Items)
+                    AssetItems.Add(item);
+
+                AssetPipelineStatus = $"Assets: imported {report.ImportedCount}, skipped {report.SkippedCount}, errors {report.ErrorCount}";
+                _rebuildContentBrowserCards();
+                if (report.ErrorCount > 0 && report.Errors.Count > 0)
+                    StatusText = $"Asset pipeline warning: {report.Errors[0]}";
+            }
+            catch (Exception ex)
+            {
+                AssetPipelineStatus = $"Asset pipeline error: {ex.Message}";
+                StatusText = AssetPipelineStatus;
+            }
+            finally
+            {
+                _assetFingerprint = _computeAssetFingerprint();
+                _assetPipelineBusy = false;
+            }
+        }
+
+        private void _exportStandalone()
+        {
+            var report = _exportService.Export(ProjectRootPath, ExportBuildName);
+            ExportStatus = report.HasPlayableExe
+                ? $"Exported playable package: {report.ExportDirectory}"
+                : $"Export package created (no exe yet): {report.ExportDirectory}";
+            if (report.Warnings.Count > 0)
+                ExportStatus += $" | {report.Warnings[0]}";
+            StatusText = ExportStatus;
+        }
+
+        private void _seedFallbackBlockPaletteIfNeeded()
+        {
+            if (AllBlocks.Count > 0) return;
+            AllBlocks.Add(new BlockViewModel(new BlockInfo { Name = "grass", R = 80, G = 170, B = 80 }));
+            AllBlocks.Add(new BlockViewModel(new BlockInfo { Name = "stone", R = 130, G = 130, B = 130 }));
+            AllBlocks.Add(new BlockViewModel(new BlockInfo { Name = "dirt", R = 120, G = 78, B = 45 }));
+            AllBlocks.Add(new BlockViewModel(new BlockInfo { Name = "wood", R = 156, G = 109, B = 65 }));
+            RefreshBlockList();
+            if (FilteredBlocks.Count > 0)
+                SelectedBlock = FilteredBlocks[0];
+        }
+
+        private void _refreshBlockRegistry()
+        {
+            AllBlocks.Clear();
+            if (_engine is null) return;
+            foreach (var bi in _engine.GetAllBlocks())
+                AllBlocks.Add(new BlockViewModel(bi));
+            RefreshBlockList();
+            _refreshInspector();
+        }
+
+        public void RefreshBlockList()
+        {
+            FilteredBlocks.Clear();
+            string f = _blockFilter.ToLowerInvariant();
+            foreach (var b in AllBlocks)
+                if (string.IsNullOrEmpty(f) ||
+                    b.Name.Contains(f, StringComparison.OrdinalIgnoreCase))
+                    FilteredBlocks.Add(b);
+        }
+
+        private void _refreshInventory()
+        {
+            InventoryItems.Clear();
+            if (_engine is null) return;
+            foreach (var b in _engine.GetAllBlocks())
+            {
+                int c = _engine.ItemCount(b.Name);
+                if (c > 0)
+                    InventoryItems.Add(new InventoryItem(b.Name, c));
+            }
+        }
+
+        private void _onEngineEvent(string name, string json)
+        {
+            Dispatcher.UIThread.InvokeAsync(() =>
+            {
+                _luaLog.AppendLine($"[{name}]");
+                LuaOutput = _luaLog.ToString();
+                _appendOutputLine($"Event: {name}");
+                _csharpScripts.DispatchEngineEvent(name, json);
+                if (name is "on_place" or "on_destroy") _refreshInventory();
+            });
+        }
+
+        private void _onSceneCellPainted(ScenePaintOp op)
+        {
+            if (!_engineReady || _engine is null || !_engine.IsValid) return;
+            try
+            {
+                if (op.BlockName is null)
+                    _engine.DestroyVoxel(op.X, SceneEditor.LayerY, op.Z);
+                else
+                    _engine.PlaceVoxel(op.X, SceneEditor.LayerY, op.Z, op.BlockName);
+            }
+            catch (Exception ex)
+            {
+                StatusText = $"Scene runtime sync error: {ex.Message}";
+            }
+        }
+
+        private void _syncSceneToEngine()
+        {
+            if (!_engineReady || _engine is null || !_engine.IsValid) return;
+            try
+            {
+                for (int z = 0; z < SceneEditor.Rows; z++)
+                for (int x = 0; x < SceneEditor.Columns; x++)
+                {
+                    var cell = SceneEditor.GetCell(x, z);
+                    if (cell.IsEmpty)
+                        _engine.DestroyVoxel(x, SceneEditor.LayerY, z);
+                    else
+                        _engine.PlaceVoxel(x, SceneEditor.LayerY, z, cell.BlockName);
+                }
+            }
+            catch (Exception ex)
+            {
+                StatusText = $"Scene sync failed: {ex.Message}";
+            }
+        }
+
+        private void _startAssetWatcher()
+        {
+            if (_assetTicker is not null) return;
+            _assetFingerprint = _computeAssetFingerprint();
+            _assetTicker = new DispatcherTimer { Interval = TimeSpan.FromSeconds(2) };
+            _assetTicker.Tick += (_, _) =>
+            {
+                if (_assetPipelineBusy) return;
+                long fp = _computeAssetFingerprint();
+                if (fp == _assetFingerprint) return;
+                _processAssetsNow();
+            };
+            _assetTicker.Start();
+        }
+
+        private long _computeAssetFingerprint()
+        {
+            try
+            {
+                string raw = ProjectFolders.AssetsRaw(ProjectRootPath);
+                if (!Directory.Exists(raw)) return 0;
+                long acc = 17;
+                foreach (var file in Directory.EnumerateFiles(raw, "*.*", SearchOption.AllDirectories))
+                {
+                    string ext = Path.GetExtension(file).ToLowerInvariant();
+                    if (ext is not ".png" and not ".wav" and not ".fbx") continue;
+                    var fi = new FileInfo(file);
+                    unchecked
+                    {
+                        acc = (acc * 31) + fi.Length;
+                        acc = (acc * 31) + fi.LastWriteTimeUtc.Ticks;
+                        acc = (acc * 31) + fi.FullName.GetHashCode();
+                    }
+                }
+                return acc;
+            }
+            catch
+            {
+                return 0;
+            }
+        }
+
+        private void _setEditorTool(string mode, string tool)
+        {
+            EditorModeLabel = mode;
+            TerrainToolLabel = tool;
+            StatusText = $"{mode} tool: {tool}";
+        }
+
+        private void _seedEditorShellData()
+        {
+            HierarchyItems.Clear();
+            OutlinerItems.Clear();
+            ContentFolders.Clear();
+
+            HierarchyItems.Add(new HierarchyItemView("MainScene", "SCN", 0));
+            HierarchyItems.Add(new HierarchyItemView("Cameras", "DIR", 1));
+            HierarchyItems.Add(new HierarchyItemView("Main Camera", "CAM", 2));
+            HierarchyItems.Add(new HierarchyItemView("Dynamic Cameras", "DIR", 1));
+            HierarchyItems.Add(new HierarchyItemView("Lights", "LIT", 1));
+            HierarchyItems.Add(new HierarchyItemView("Terrain", "TRN", 1));
+            HierarchyItems.Add(new HierarchyItemView("Player", "PLY", 1));
+            HierarchyItems.Add(new HierarchyItemView("Props", "DIR", 1));
+
+            OutlinerItems.Add(new OutlinerItemView("Terrain", "Terrain", "TRN"));
+            OutlinerItems.Add(new OutlinerItemView("Directional Light", "Light", "LIT"));
+            OutlinerItems.Add(new OutlinerItemView("Player", "Actor", "PLY"));
+            OutlinerItems.Add(new OutlinerItemView("VoxelChunk_0_0", "Chunk", "CHK"));
+            OutlinerItems.Add(new OutlinerItemView("VoxelChunk_0_1", "Chunk", "CHK"));
+
+            ContentFolders.Add(new ContentFolderView("Assets", 0));
+            ContentFolders.Add(new ContentFolderView("Scenes", 1));
+            ContentFolders.Add(new ContentFolderView("Visual Assets", 1));
+            ContentFolders.Add(new ContentFolderView("Textures", 2));
+            ContentFolders.Add(new ContentFolderView("Materials", 2));
+            ContentFolders.Add(new ContentFolderView("Audio", 1));
+            ContentFolders.Add(new ContentFolderView("Scripts", 1));
+            ContentFolders.Add(new ContentFolderView("Mods", 1));
+            if (ContentFolders.Count > 0)
+                SelectedContentFolder = ContentFolders[0];
+
+            _refreshInspector();
+            _rebuildContentBrowserCards();
+        }
+
+        private void _refreshInspector()
+        {
+            InspectorSections.Clear();
+            InspectorTitle = string.IsNullOrWhiteSpace(SelectedBlockName)
+                ? "Inspector - World"
+                : $"Inspector - {SelectedBlockName}";
+
+            var world = new InspectorSectionView("World");
+            world.Fields.Add(new InspectorFieldView("Name", WorldName));
+            world.Fields.Add(new InspectorFieldView("Seed", SeedText));
+            world.Fields.Add(new InspectorFieldView("Chunks Loaded", ChunkCountText));
+            world.Fields.Add(new InspectorFieldView("Engine Ready", _engineReady ? "Yes" : "No"));
+            InspectorSections.Add(world);
+
+            var scene = new InspectorSectionView("Scene");
+            scene.Fields.Add(new InspectorFieldView("Scene Name", SceneEditor.SceneName));
+            scene.Fields.Add(new InspectorFieldView("Layer Y", SceneEditor.LayerYText));
+            scene.Fields.Add(new InspectorFieldView("Rows x Cols", $"{SceneEditor.Rows} x {SceneEditor.Columns}"));
+            scene.Fields.Add(new InspectorFieldView("Tool", SceneEditor.ActiveToolLabel));
+            InspectorSections.Add(scene);
+
+            if (!string.IsNullOrWhiteSpace(SelectedBlockName))
+            {
+                var selected = new InspectorSectionView("Selected Block");
+                selected.Fields.Add(new InspectorFieldView("Name", SelectedBlockName));
+                selected.Fields.Add(new InspectorFieldView("Hardness", SelectedBlockHardness));
+                if (SelectedBlock is not null)
+                    selected.Fields.Add(new InspectorFieldView("RGB", $"{SelectedBlock.R}, {SelectedBlock.G}, {SelectedBlock.B}"));
+                InspectorSections.Add(selected);
+            }
+        }
+
+        private void _rebuildContentBrowserCards()
+        {
+            ContentAssets.Clear();
+
+            string selectedFolder = SelectedContentFolder?.Name ?? "Assets";
+            string filter = (ContentBrowserSearchText ?? "").Trim();
+
+            foreach (var item in AssetItems)
+            {
+                if (!string.IsNullOrWhiteSpace(filter) &&
+                    item.Source.IndexOf(filter, StringComparison.OrdinalIgnoreCase) < 0 &&
+                    item.Kind.IndexOf(filter, StringComparison.OrdinalIgnoreCase) < 0)
+                    continue;
+
+                ContentAssets.Add(ContentAssetCardView.FromAssetPipeline(item));
+            }
+
+            if (ContentAssets.Count == 0)
+            {
+                ContentAssets.Add(new ContentAssetCardView("Scene Builder", "tool", Brushes.SteelBlue));
+                ContentAssets.Add(new ContentAssetCardView("Lua Console", "tool", Brushes.OliveDrab));
+                ContentAssets.Add(new ContentAssetCardView("C# Scripts", "tool", Brushes.DarkSlateBlue));
+                ContentAssets.Add(new ContentAssetCardView("Export", "tool", Brushes.DarkCyan));
+            }
+
+            ContentBrowserStatus = $"{ContentAssets.Count} item(s) in {selectedFolder}";
+        }
+
+        private void _appendOutputLine(string message)
+        {
+            if (string.IsNullOrWhiteSpace(message)) return;
+            _outputLog.AppendLine($"[{DateTime.Now:HH:mm:ss}] {message}");
+            OutputLog = _outputLog.ToString();
+            OutputStatus = "Live";
+        }
+
+        public event PropertyChangedEventHandler? PropertyChanged;
+
+        private bool Set<T>(ref T field, T value, [CallerMemberName] string prop = "")
+        {
+            if (EqualityComparer<T>.Default.Equals(field, value)) return false;
+            field = value;
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(prop));
+            return true;
+        }
+
+        private void OnPropertyChanged([CallerMemberName] string prop = "")
+            => PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(prop));
+
+        
+        public void Dispose()
+        {
+            _ticker?.Stop();
+            _assetTicker?.Stop();
+            _engineReady = false;
+            try { _csharpScripts.Reset(); } catch { }
+            try { _engine?.Quit(); } catch { /* ignore */ }
+            try { _engine?.Dispose(); } catch { /* ignore */ }
+        }
+
+        private void _registerDefaultCSharpScripts()
+        {
+            _csharpScripts.Register<EditorHeartbeatScript>("EditorHeartbeat");
+            _csharpScripts.Register<LuaBridgeDemoScript>("LuaBridgeDemo");
+            RegisteredCSharpScripts.Clear();
+            foreach (var name in _csharpScripts.RegisteredScriptNames)
+                RegisteredCSharpScripts.Add(name);
+            CSharpScriptOutput = "Registered: " + string.Join(", ", RegisteredCSharpScripts);
+        }
+
+        private void _appendCSharpScriptLog(string message)
+        {
+            _csharpScriptLog.AppendLine(message);
+            CSharpScriptOutput = _csharpScriptLog.ToString();
+            _appendOutputLine(message);
+        }
+    }
+
+    // Sub-ViewModels
+
+    public class BlockViewModel
+    {
+        public string  Name     { get; }
+        public string  Hardness { get; } = "1.0"; 
+        public IBrush  ColorBrush { get; }
+        public byte    R, G, B;
+
+        public BlockViewModel(BlockInfo bi)
+        {
+            Name      = bi.Name;
+            R = bi.R; G = bi.G; B = bi.B;
+            ColorBrush = new SolidColorBrush(new Color(255, R, G, B));
+        }
+    }
+
+    public class InventoryItem
+    {
+        public string Name      { get; }
+        public string CountText { get; }
+
+        public InventoryItem(string name, int count)
+        {
+            Name      = name;
+            CountText = count.ToString();
+        }
+    }
+
+    public sealed class HierarchyItemView
+    {
+        public string Name { get; }
+        public string Icon { get; }
+        public Thickness Indent { get; }
+
+        public HierarchyItemView(string name, string icon, int depth)
+        {
+            Name = name;
+            Icon = icon;
+            Indent = new Thickness(depth * 12, 2, 0, 2);
+        }
+    }
+
+    public sealed class OutlinerItemView
+    {
+        public string Name { get; }
+        public string Kind { get; }
+        public string Icon { get; }
+
+        public OutlinerItemView(string name, string kind, string icon)
+        {
+            Name = name;
+            Kind = kind;
+            Icon = icon;
+        }
+    }
+
+    public sealed class InspectorFieldView
+    {
+        public string Name { get; }
+        public string Value { get; }
+
+        public InspectorFieldView(string name, string value)
+        {
+            Name = name;
+            Value = value;
+        }
+    }
+
+    public sealed class InspectorSectionView
+    {
+        public string Title { get; }
+        public ObservableCollection<InspectorFieldView> Fields { get; } = new();
+
+        public InspectorSectionView(string title)
+        {
+            Title = title;
+        }
+    }
+
+    public sealed class ContentFolderView
+    {
+        public string Name { get; }
+        public Thickness Indent { get; }
+
+        public ContentFolderView(string name, int depth)
+        {
+            Name = name;
+            Indent = new Thickness(depth * 12, 2, 0, 2);
+        }
+
+        public override string ToString() => Name;
+    }
+
+    public sealed class ContentAssetCardView
+    {
+        public string Name { get; }
+        public string Kind { get; }
+        public IBrush PreviewBrush { get; }
+
+        public ContentAssetCardView(string name, string kind, IBrush previewBrush)
+        {
+            Name = name;
+            Kind = kind;
+            PreviewBrush = previewBrush;
+        }
+
+        public static ContentAssetCardView FromAssetPipeline(AssetPipelineItemView item)
+        {
+            IBrush brush = item.Kind.ToLowerInvariant() switch
+            {
+                "texture" => Brushes.CornflowerBlue,
+                "audio" => Brushes.SeaGreen,
+                "mesh" => Brushes.Peru,
+                _ => Brushes.Gray
+            };
+            string name = Path.GetFileName(item.Source);
+            return new ContentAssetCardView(name, item.Kind, brush);
+        }
+    }
+
+    public sealed class StatsViewModel : INotifyPropertyChanged
+    {
+        private string _chunksDrawnText = "0";
+        private string _drawCallsText   = "0";
+        private string _trianglesText   = "0";
+        private float  _frameMs;
+
+        public string ChunksDrawnText { get => _chunksDrawnText; set => Set(ref _chunksDrawnText, value); }
+        public string DrawCallsText   { get => _drawCallsText;   set => Set(ref _drawCallsText,   value); }
+        public string TrianglesText   { get => _trianglesText;   set => Set(ref _trianglesText,   value); }
+
+        public float FrameMs
+        {
+            get => _frameMs;
+            set
+            {
+                Set(ref _frameMs, value);
+                OnPropertyChanged(nameof(FrameMsFormatted));
+                OnPropertyChanged(nameof(FpsFormatted));
+            }
+        }
+
+        public string FrameMsFormatted => $"{_frameMs:F1} ms";
+        public string FpsFormatted     => _frameMs > 0 ? $"{1000f / _frameMs:F0} fps" : "â€“";
+
+        public event PropertyChangedEventHandler? PropertyChanged;
+
+        private bool Set<T>(ref T f, T v, [CallerMemberName] string p = "")
+        {
+            if (EqualityComparer<T>.Default.Equals(f, v)) return false;
+            f = v; PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(p)); return true;
+        }
+        private void OnPropertyChanged([CallerMemberName] string p = "")
+            => PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(p));
+    }
+
+    public sealed class RelayCommand : ICommand
+    {
+        private readonly Action _action;
+        public RelayCommand(Action action) => _action = action;
+        public bool CanExecute(object? _)  => true;
+        public void Execute(object? _)     => _action.Invoke();
+        public event EventHandler? CanExecuteChanged { add { } remove { } }
+    }
+}
+
