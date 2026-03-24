@@ -1,0 +1,11 @@
+C:\Users\BEST\Desktop\VoxelBlock\VoxelBlock.Bridge\bin\Debug\net8.0\VoxelBlock.Bridge.deps.json
+C:\Users\BEST\Desktop\VoxelBlock\VoxelBlock.Bridge\bin\Debug\net8.0\VoxelBlock.Bridge.dll
+C:\Users\BEST\Desktop\VoxelBlock\VoxelBlock.Bridge\bin\Debug\net8.0\VoxelBlock.Bridge.pdb
+C:\Users\BEST\Desktop\VoxelBlock\VoxelBlock.Bridge\obj\Debug\net8.0\VoxelBlock.Bridge.GeneratedMSBuildEditorConfig.editorconfig
+C:\Users\BEST\Desktop\VoxelBlock\VoxelBlock.Bridge\obj\Debug\net8.0\VoxelBlock.Bridge.AssemblyInfoInputs.cache
+C:\Users\BEST\Desktop\VoxelBlock\VoxelBlock.Bridge\obj\Debug\net8.0\VoxelBlock.Bridge.AssemblyInfo.cs
+C:\Users\BEST\Desktop\VoxelBlock\VoxelBlock.Bridge\obj\Debug\net8.0\VoxelBlock.Bridge.csproj.CoreCompileInputs.cache
+C:\Users\BEST\Desktop\VoxelBlock\VoxelBlock.Bridge\obj\Debug\net8.0\VoxelBlock.Bridge.dll
+C:\Users\BEST\Desktop\VoxelBlock\VoxelBlock.Bridge\obj\Debug\net8.0\refint\VoxelBlock.Bridge.dll
+C:\Users\BEST\Desktop\VoxelBlock\VoxelBlock.Bridge\obj\Debug\net8.0\VoxelBlock.Bridge.pdb
+C:\Users\BEST\Desktop\VoxelBlock\VoxelBlock.Bridge\obj\Debug\net8.0\ref\VoxelBlock.Bridge.dll
