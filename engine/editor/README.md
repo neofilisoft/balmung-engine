@@ -1,7 +1,7 @@
 # Editor Modules
 The editor tree mirrors the separation used by large production engines.
-- nimation: timeline tooling, animation previews, retarget utilities.
-- udio: waveform previews, bus routing, audio inspector tooling.
+- animation: timeline tooling, animation previews, retarget utilities.
+- audio: waveform previews, bus routing, audio inspector tooling.
 - debugger: live diagnostics, traces, perf overlays, remote hooks.
 - docks: reusable dock panels, scene browser panes, content browsers.
 - gui: editor chrome, widgets, style system, command routing.
