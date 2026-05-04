@@ -1,0 +1,21 @@
+﻿{
+  "name": "Balmung Engine",
+  "version": "2.4.0",
+  "vendor": "Neofilisoft",
+  "module_root": "engine",
+  "editor_modules": [
+    "animation",
+    "audio",
+    "debugger",
+    "docks",
+    "gui",
+    "import",
+    "export",
+    "settings"
+  ],
+  "scene_modules": [
+    "2d",
+    "3d"
+  ],
+  "default_font_manifest": "font/default_font.json"
+}

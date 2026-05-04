@@ -1,0 +1,13 @@
+﻿{
+  "engine_version": "2.4.0",
+  "default_family": "Inter",
+  "ui_default": "InterVariable.ttf",
+  "fallback_order": [
+    "Inter.ttc",
+    "InterVariable-Italic.ttf"
+  ],
+  "notes": [
+    "Used as the default font family for editor UI and engine UI surfaces.",
+    "Game projects may override this per project or per theme."
+  ]
+}
