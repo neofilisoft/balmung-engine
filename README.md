@@ -53,7 +53,7 @@ What builds cleanly in this checkout today:
 - production-hardened fallback C API/runtime with persistent world saves, mod metadata scanning, block registry, crafting, and editor-safe stats/events
 
 What is not production-complete yet:
-- Full AAA renderer features such as a shipping Visibility Buffer backend, hardware virtualized geometry, production GI, and volumetric weather are architectural stubs / roadmap items, not complete Unreal-class implementations yet.
+- Full AAA renderer features such as a shipping Visibility Buffer backend, hardware virtualized geometry, production GI, and volumetric weather are architectural stubs / roadmap items, not complete Highend-class implementations yet.
 
 ## Quick Start
 
