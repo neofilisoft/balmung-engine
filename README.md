@@ -2,6 +2,8 @@
 
 Balmung is a hybrid general-purpose game engine and tooling workspace aimed at `2D`, `HD-2D`, `3D`, RPG, and open-world production, with terrain tooling as one subsystem rather than the whole identity of the engine. the engine owns the game loop, runtime orchestration, and rendering path, while still shipping with a visual editor for content, scene, and asset workflows.
 
+Balmung is not a voxel-only game maker. It is being shaped closer to a general-purpose editor/runtime like Unity, Unreal, and Godot, while still using chunked terrain and voxel-lighting techniques where they are useful for terrain, world streaming, optimization, and lighting research in the broad spirit of CryEngine-style voxel lighting.
+
 Executable roles:
 - `balmung.exe` is the main Balmung shell/runtime entry point and project-management surface.
 - `bal-editor.exe` opens the visual editor directly.
@@ -11,6 +13,7 @@ Current stack:
 - `C#` Avalonia editor in `editor/`
 - `Lua` runtime scripting / modding in `mods/`
 - `Python` automation and content tooling in `tools/`
+- `BT Framework` (`Balmung Terrain Framework`) for Terrain Generator / Editor workflows backed by chunked optimization
 
 Copyright:
 - `© Neofilisoft`
@@ -38,7 +41,6 @@ Balmung intentionally uses its own editor language while keeping ECS + OOP workf
 | Unity | Game Object | Prefab | Hierarchy |
 | Unreal | Actor | Blueprint | World Outliner |
 | Godot | Node | Scene | Scene Tree |
-| Flax | Actor | Prefab | Scene Tree |
 | Balmung | Entity | Prefab | Outliner |
 
 In Balmung Editor, an object in the world is called an `Entity`, whether it is backed by ECS data, high-level C# logic, or Lua gameplay logic.
@@ -48,12 +50,12 @@ In Balmung Editor, an object in the world is called an `Entity`, whether it is b
 What builds cleanly in this checkout today:
 - `editor` as a Windows desktop executable
 - `libbalmung.dll` native runtime / bridge library
-- `balmung_native_framework` and `balmung_voxel_framework`
+- `balmung_native_framework` and `balmung_bt_framework` (`balmung_voxel_framework` remains as a compatibility target)
 - `balmung_core`, `balmung_engine`, and `balmung_game`
 - production-hardened fallback C API/runtime with persistent world saves, mod metadata scanning, block registry, crafting, and editor-safe stats/events
 
 What is not production-complete yet:
-- Full AAA renderer features such as a shipping Visibility Buffer backend, hardware virtualized geometry, production GI, and volumetric weather are architectural stubs / roadmap items, not complete Highend-class implementations yet.
+- Full AAA renderer features such as a shipping Visibility Buffer backend, hardware virtualized geometry, production GI, and volumetric weather are architectural stubs / roadmap items, not complete Unreal-class implementations yet.
 
 ## Quick Start
 
@@ -85,10 +87,24 @@ Build the production-oriented native game/runtime path:
 cmake -S . -B build-production -G Ninja `
   -DBM_BUILD_RENDERER=ON `
   -DBM_BUILD_GAME=ON `
+  -DBM_NO_CONSOLE=ON `
   -DBM_BUILD_PYTHON=OFF `
   -DBM_BUILD_TESTS=OFF
 
 cmake --build build-production --target balmung_game balmung
+```
+
+Build the WebAssembly export target with Emscripten:
+
+```powershell
+emcmake cmake -S . -B build-wasm `
+  -DBM_BUILD_RENDERER=ON `
+  -DBM_BUILD_GAME=ON `
+  -DBM_BUILD_WASM=ON `
+  -DBM_BUILD_PYTHON=OFF `
+  -DBM_BUILD_TESTS=OFF
+
+cmake --build build-wasm --target balmung_wasm
 ```
 
 Publish a reusable Windows editor executable:
@@ -178,7 +194,9 @@ The terrain subsystem is still explicitly voxel/chunk-oriented internally. Publi
 - `TerrainGenerator`
 - `ChunkManager`
 
-So Balmung is no longer positioned as a voxel-only engine, but this subsystem is still clearly a terrain/voxel toolkit rather than a neutral world framework.
+So Balmung is no longer positioned as a voxel-only engine. BT Framework is the terrain-generation and editor terrain toolkit, backed by chunked data/mesh/light optimization.
+
+The remaining voxel naming in low-level files refers to terrain/chunk data structures and lighting-oriented implementation details, not a product limitation. Gameplay projects can be 2D, HD-2D, 2.5D, 3D, RPG, simulation, tool, or seamless open-world projects.
 
 ## Physics
 
@@ -201,7 +219,7 @@ python tools\balmung_tool.py info
 python tools\balmung_tool.py validate-layout
 python tools\bm_scene.py demo_scene --width 32 --height 32 --block stone
 python tools\bm_assets.py --dry-run
-python tools\bm_export.py Build1
+python tools\bm_export.py Build1 --target-platform Windows
 ```
 
 ## Docs
