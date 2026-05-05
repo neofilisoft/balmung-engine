@@ -1,0 +1,35 @@
+Balmung Engine build dependencies
+
+Required:
+- Windows 10/11, Linux, or macOS host supported by the selected toolchain
+- CMake 3.22 or newer
+- C++20 compiler toolchain
+- Ninja or a supported CMake generator
+- .NET SDK 10 for editor/bridge builds
+
+Recommended on Windows:
+- Visual Studio 2022 Build Tools with Desktop development with C++
+- MSYS2 UCRT64 or another MinGW-compatible runtime when using the current MinGW DLL flow
+
+Optional:
+- Vulkan SDK 1.4 for BM_RENDER_BACKEND=VULKAN experiments
+- Lua 5.5 development package for native Lua scripting builds
+- pybind11 for BM_BUILD_PYTHON=ON
+- Python 3.10+ for tools/*.py automation
+- Emscripten for WebAssembly export builds
+
+Engine tech stack:
+- C++20 native runtime
+- C# .NET 10 editor and bridge
+- Lua 5.5 scripting target
+- Vulkan 1.4 experimental renderer path
+- OpenGL 4.1-4.6 renderer path
+- WebAssembly export through Emscripten
+
+Bundled:
+- AsterCorePhysics 3.1 is included at thirdparty/physics/AsterCorePhysics-3.1
+
+Useful environment variables:
+- BM_ASTERCORE_ROOT: external AsterCorePhysics checkout
+- BALMUNG_TEMPLATE_ROOT: root folder containing asset templates
+- MSYS2_ROOT or MSYS2_UCRT64_BIN: MSYS2 runtime DLL discovery for editor output
