@@ -236,5 +236,6 @@ Available docs:
 If CMake configures slowly or inconsistently on Windows, prefer Ninja or Visual Studio generators over ad-hoc MSYS builds.
 
 If `balmung_game` does not appear, configure with `-DBM_BUILD_RENDERER=ON -DBM_BUILD_GAME=ON` and build the `balmung_game` target.
+
 [Dependency](./docs/dependency.txt)
 
