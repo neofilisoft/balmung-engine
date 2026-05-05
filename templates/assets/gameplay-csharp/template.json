@@ -1,0 +1,17 @@
+{
+  "schema_version": 1,
+  "id": "gameplay-csharp",
+  "display_name": "Balmung Gameplay C# Template",
+  "description": "Gameplay starter scripts for Balmung asset/template workflows.",
+  "target_directory": "Assets/Raw/Scripts/BalmungGameplay",
+  "source_directory": "source",
+  "files": [
+    "DialogueManager.cs",
+    "Inventory.cs",
+    "Level.cs",
+    "LevelUp.cs",
+    "Quest.cs",
+    "SaveGame.cs",
+    "gamepromt.txt"
+  ]
+}
