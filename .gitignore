@@ -70,3 +70,5 @@ Testing/
 
 # source
 *.cpp
+CMakeLists.txt
+
